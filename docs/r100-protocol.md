@@ -136,6 +136,12 @@ a fixed sample dt (~5 ms / 200 Hz) is a reasonable starting assumption.
 
 ## Hardware gotchas learned on real hardware
 
+- **Backlight is HID-controlled, independent of video.** Sending `VR App Start`
+  over HID turns the panel backlight on by itself — even with no DisplayPort
+  signal present. A lit-but-blank (black) screen is the expected intermediate
+  state: firmware has enabled the panels, but no DP video is feeding pixels yet.
+  (Confirmed on Steam Deck: backlight on + IMU streaming + buttons all working
+  from the HID interface alone.)
 - **DisplayPort Alt Mode does NOT pass through USB hubs.** The DP lanes are
   point-to-point on the USB-C connector; a hub only carries USB data. The headset
   must be plugged **directly into the host's USB-C port** for the panels to get
