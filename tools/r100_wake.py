@@ -103,15 +103,21 @@ def main():
 
     print("Waking headset...")
     send(START_DEVICE, "VR App Start")
+    time.sleep(0.1)
+    # OpenHMD left these commented out, but on a cold device the sensors may need
+    # to be explicitly switched on. Send them and see if report-id-5 starts.
+    send(START_ACCEL, "Accel On")
+    time.sleep(0.05)
+    send(START_GYRO, "Gyro On")
+    time.sleep(0.05)
     send(KEEP_ALIVE, "Sleep Disable")
-    # Uncomment if no sensor (id 5) reports arrive:
-    # send(START_ACCEL, "Accel On")
-    # send(START_GYRO, "Gyro On")
 
     print("\nIf the panels lit up: SUCCESS. 🎉  Reading input (Ctrl-C to stop)...\n")
 
     last_keepalive = time.monotonic()
     last_imu_print = 0.0
+    last_heartbeat = time.monotonic()
+    total_reports = 0
     seen_types = set()
 
     try:
@@ -123,6 +129,11 @@ def main():
 
             r, _, _ = select.select([fd], [], [], 0.2)
             if not r:
+                # Heartbeat so we can tell "device is silent" from "script is stuck".
+                if now - last_heartbeat >= 2.0:
+                    print(f"...no input reports yet (received {total_reports} so far). "
+                          f"Move the headset; if still nothing, the device isn't streaming.")
+                    last_heartbeat = now
                 continue
             try:
                 buf = os.read(fd, 256)
@@ -131,10 +142,11 @@ def main():
             if not buf:
                 continue
 
+            total_reports += 1
             t = buf[0]
             if t not in seen_types:
                 seen_types.add(t)
-                print(f"[new report type {t}] first bytes: {buf[:8].hex(' ')}")
+                print(f"[new report type {t}] len={len(buf)} bytes: {buf[:min(len(buf),32)].hex(' ')}")
 
             if t == IRQ_BUTTONS and len(buf) > 1:
                 st = buf[1]
