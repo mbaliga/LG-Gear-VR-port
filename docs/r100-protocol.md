@@ -134,6 +134,19 @@ a fixed sample dt (~5 ms / 200 Hz) is a reasonable starting assumption.
 4. **Stereo renderer.** Open a `Presentation` on the headset's secondary display
    and render a 1440×960 side-by-side 360 view that responds to head orientation.
 
+## Hardware gotchas learned on real hardware
+
+- **DisplayPort Alt Mode does NOT pass through USB hubs.** The DP lanes are
+  point-to-point on the USB-C connector; a hub only carries USB data. The headset
+  must be plugged **directly into the host's USB-C port** for the panels to get
+  video. Through a hub you still get the USB HID interface (sensors/buttons), but
+  the displays will never light. (Confirmed on Steam Deck via two chained hubs.)
+- **Always let `r100_wake.py` auto-detect the node** (run with no argument) or it
+  may be pointed at the wrong HID device. On a Steam Deck the headset showed up as
+  `hidraw7` ("LGE Custom Human interface", `1004:6374`), while `hidraw3` was the
+  Deck's own FTS3528 touchscreen. Writing the wake command to the wrong node looks
+  like it succeeds but does nothing.
+
 ## Open questions / TODO (to resolve on real hardware)
 
 - [ ] Confirm whether the HID handshake must happen **before** DP Alt Mode video
