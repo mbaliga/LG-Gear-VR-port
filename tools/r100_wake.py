@@ -52,18 +52,30 @@ BTN_OK_ON, BTN_BACK_ON, BTN_BACK_OFF, BTN_OK_OFF = 1, 2, 3, 4
 
 
 def find_hidraw():
-    """Return the /dev/hidrawN path for the R100, or None."""
-    target = f"{VID:04X}:{PID:04X}".upper()
+    """Return the /dev/hidrawN path for the R100, or None.
+
+    Parses HID_ID from each hidraw device's uevent. HID_ID looks like
+    'HID_ID=0003:00001004:00006374' -> bus:vendor:product (hex)."""
     for node in sorted(glob.glob("/sys/class/hidraw/hidraw*")):
         uevent = os.path.join(node, "device", "uevent")
         try:
             with open(uevent) as f:
-                text = f.read().upper()
+                lines = f.read().splitlines()
         except OSError:
             continue
-        # HID_ID looks like: HID_ID=0003:00001004:00006374
-        if target.replace(":", "") in text.replace(":", ""):
-            return "/dev/" + os.path.basename(node)
+        for line in lines:
+            if not line.startswith("HID_ID="):
+                continue
+            parts = line.split("=", 1)[1].split(":")
+            if len(parts) != 3:
+                continue
+            try:
+                vid = int(parts[1], 16) & 0xFFFF
+                pid = int(parts[2], 16) & 0xFFFF
+            except ValueError:
+                continue
+            if vid == VID and pid == PID:
+                return "/dev/" + os.path.basename(node)
     return None
 
 
