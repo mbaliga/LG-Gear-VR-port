@@ -136,6 +136,11 @@ a fixed sample dt (~5 ms / 200 Hz) is a reasonable starting assumption.
 
 ## Hardware gotchas learned on real hardware
 
+- **END-TO-END PROOF (Steam Deck):** with the headset direct on USB-C and
+  `r100_wake.py` sending `VR App Start`, the Deck's KDE desktop renders *inside*
+  the headset — full pipeline confirmed: DP Alt Mode video + HID backlight +
+  head tracking + buttons, all on a non-LG host. Remaining work is mode/geometry
+  (set 1440×960, side-by-side stereo, lens correction) and then the Android port.
 - **DP video and USB HID coexist on a direct connection — confirmed working on a
   Steam Deck.** Plugged straight into the Deck's USB-C port, the headset
   simultaneously presents `card0-DP-1: connected` (DisplayPort Alt Mode video)
