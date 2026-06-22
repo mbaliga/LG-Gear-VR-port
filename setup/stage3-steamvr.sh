@@ -35,7 +35,9 @@ cp -r "$WORK/LG-R100" "$WORK/SteamVR-OpenHMD/subprojects/openhmd"
 echo ">>> [3/3] Build the SteamVR plugin..."
 cd "$WORK/SteamVR-OpenHMD"
 rm -rf build && mkdir build && cd build
-cmake ..
+# CMAKE_POLICY_VERSION_MINIMUM: the bridge/OpenHMD declare an ancient
+# cmake_minimum_required that modern CMake (>=3.31) rejects outright.
+cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..
 make
 
 echo
