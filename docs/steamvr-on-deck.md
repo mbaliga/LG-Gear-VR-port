@@ -89,64 +89,75 @@ drifts, that's expected — OpenHMD's R100 fusion is rough; we tune later.
 
 ---
 
-## Stage 3 — Build the SteamVR bridge (with R100-capable OpenHMD)
+## Stage 3 — Build the SteamVR bridge (reusing our LG-R100 OpenHMD)
 
-SteamVR-OpenHMD bundles OpenHMD as a submodule, but upstream OpenHMD has no R100
-driver — so we point the submodule at the R100 branch before building.
+The bridge bundles a stock OpenHMD with no R100 driver. The trick (per the
+[SteamVR-R100-Deck guide](https://rentry.co/SteamVR-R100-Deck)) is to **delete
+the bundled OpenHMD and drop in the `LG-R100` we already built in Stage 2.**
+
+Scripted: `bash setup/stage3-steamvr.sh`. What it does:
 
 ```bash
 cd ~/LGVR
+
+# 1) udev rules so hidraw is accessible without root (xr-hardware)
+git clone https://gitlab.freedesktop.org/monado/utilities/xr-hardware.git xr-hw
+cd xr-hw && make && sudo make install && cd ~/LGVR
+
+# 2) clone the bridge, swap in our R100-capable OpenHMD
 git clone --recursive https://github.com/ChristophHaag/SteamVR-OpenHMD.git
-cd SteamVR-OpenHMD
+rm -rf SteamVR-OpenHMD/subprojects/openhmd
+cp -r LG-R100 SteamVR-OpenHMD/subprojects/openhmd
 
-# Make the bundled OpenHMD the R100-capable one:
-cd subprojects/openhmd 2>/dev/null || cd external/openhmd
-git remote add lgr https://github.com/ChristophHaag/OpenHMD.git || true
-git fetch lgr
-git checkout LG-R100-new || git checkout LG-R100
-cd -                       # back to SteamVR-OpenHMD root
-
-mkdir -p build && cd build
-cmake ..
-make
+# 3) build the plugin
+cd SteamVR-OpenHMD && mkdir build && cd build && cmake .. && make
 ```
 
-The build dir must end up containing `driver.vrdrivermanifest`, `resources/`, and
-`bin/linux64/driver_openhmd.so`.
+After it builds, replug the headset so the new udev ACLs apply
+(`ls -l /dev | grep hidraw` should show a `+`, meaning the `deck` user has access).
 
-> ⚠️ This is the step most likely to need iteration (submodule paths, the OpenHMD
-> version the bridge expects, Steam runtime libstdc++ mismatches). If `make`
-> fails, capture the error — there's also a `docker.sh`/runtime-matched build path
-> we can fall back to. **Don't push through errors here; report them.**
+> ⚠️ Most likely step to need iteration (Steam-runtime libstdc++ mismatches,
+> cmake finding OpenHMD). If `make` fails, capture the error — there's a
+> `docker.sh` runtime-matched fallback. **Report errors, don't push through.**
 
 ---
 
-## Stage 4 — Register with SteamVR and go big-screen
+## Stage 4 — Register, configure, launch (`bash setup/stage4-register.sh`)
 
-```bash
-cd ~/LGVR/SteamVR-OpenHMD
-./register.sh     # disables built-in HMD plugins + registers this build dir
+The script runs `./register.sh` and writes `~/.ohmd_config.txt`:
+
+```
+hmddisplay 0
+hmdtracker 0      # set to -1 to LOCK orientation (no tracking) — often nicer
+leftcontroller -1 # for watching a fixed screen, given the drift
+rightcontroller -1
 ```
 
-Or manually:
-```bash
-~/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrpathreg adddriver ~/LGVR/SteamVR-OpenHMD/build
-cp ~/LGVR/SteamVR-OpenHMD/steamvr.vrsettings ~/.local/share/Steam/config/steamvr.vrsettings
-```
+Then, manually (GUI steps):
 
-Then:
-1. Plug in the headset (direct USB-C), cover the proximity sensor.
-2. Launch **SteamVR** from Steam.
-3. Check `~/.local/share/Steam/logs/vrserver.txt` for errors if it doesn't start.
-4. Once SteamVR sees the HMD, use **Desktop / Theater view** to throw any flat
-   game or video onto a huge virtual screen with head tracking.
-
-Useful config:
-- Refresh rate: edit `displayFrequency` in
-  `build/resources/settings/default.vrsettings` (panels do 57/60 Hz).
-- Device selection: `~/.ohmd_config.txt` with `hmddisplay 0` etc.
+1. Headset **direct** in USB-C, proximity sensor covered.
+2. First run, from a terminal, to do room setup:
+   ```bash
+   OHMD_VENDOR_OVERRIDE=Oculus ~/.steam/steam/steamapps/common/SteamVR/bin/vrstartup.sh
+   ```
+   Choose **Standing Only**, height ~36 in, finish, then Ctrl+C.
+3. In Steam: **SteamVR → Properties → Launch Options**:
+   ```
+   OHMD_VENDOR_OVERRIDE=Oculus %command%
+   ```
+   (`OHMD_VENDOR_OVERRIDE=Oculus` makes SteamVR accept the headset.)
+4. Launch SteamVR. **Navigate with the Deck's own screen/trackpads** — in-VR
+   controllers do NOT work. Open SteamVR's **Desktop / Theater view** for
+   big-screen flat media, or "Steam 360 Video Player" for 360 content.
 
 To undo everything: `./unregister.sh`, then `sudo steamos-readonly enable`.
+
+### Expectation-setting (from the guide + OpenHMD's own notes)
+- Tracking has **bad drift and imperfect pitch/yaw/roll** — OpenHMD's R100 fusion
+  is a WIP. For a stationary big screen this is tolerable, and `hmdtracker -1`
+  (orientation locked) may actually be the comfiest way to watch.
+- In-VR controllers don't work; drive everything from the Deck screen.
+- 3DOF only (no positional tracking).
 
 ---
 
