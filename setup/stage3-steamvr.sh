@@ -7,6 +7,10 @@ set -e
 WORK="$HOME/LGVR"
 cd "$WORK"
 
+# SteamOS re-locks the root FS on reboot; make sure it's writable for pacman.
+echo ">>> Ensuring root filesystem is writable..."
+sudo steamos-readonly disable || true
+
 if [ ! -d "$WORK/LG-R100/build" ]; then
     echo "!! Stage 2 output not found at ~/LGVR/LG-R100/build."
     echo "   Run setup/stage2-openhmd.sh first (must build successfully)."

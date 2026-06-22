@@ -11,6 +11,10 @@ WORK="$HOME/LGVR"
 mkdir -p "$WORK"
 cd "$WORK"
 
+# SteamOS re-locks the root FS on reboot; make sure it's writable for pacman.
+echo ">>> Ensuring root filesystem is writable..."
+sudo steamos-readonly disable || true
+
 echo ">>> Force-reinstalling build dev-files..."
 # NOTE: SteamOS marks several dev packages "installed" but ships them WITHOUT
 # their dev files (.pc, headers, cmake configs). '--needed' then skips them and
