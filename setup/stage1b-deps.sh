@@ -7,7 +7,7 @@
 
 echo ">>> Installing build toolchain + libraries (type your password promptly)..."
 sudo pacman -S --needed \
-    ninja meson cmake base-devel hidapi linux-headers \
+    ninja meson cmake base-devel hidapi libusb linux-headers \
     libglvnd glibc gcc sdl sdl2 sdl2_ttf lib32-sdl lib32-sdl2 \
     lib32-sdl2_ttf glew glu lib32-glu lib32-glew python3
 sudo pacman -S --needed linux-api-headers linux-neptune-headers

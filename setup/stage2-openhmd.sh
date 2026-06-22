@@ -11,6 +11,9 @@ WORK="$HOME/LGVR"
 mkdir -p "$WORK"
 cd "$WORK"
 
+echo ">>> Ensuring libusb is present (OpenHMD's bundled hidapi needs it)..."
+sudo pacman -S --needed libusb
+
 if [ ! -d "$WORK/LG-R100" ]; then
     echo ">>> Cloning OpenHMD (LG-R100 branch)..."
     git clone --branch LG-R100 https://github.com/OpenHMD/OpenHMD.git LG-R100
@@ -20,9 +23,9 @@ fi
 
 cd "$WORK/LG-R100"
 echo ">>> Configuring build (driver: lgr, examples: simple,opengl)..."
-if [ ! -d build ]; then
-    meson ./build -Ddrivers=lgr -Dexamples=simple,opengl
-fi
+# Wipe any previous (possibly half-configured) build dir for a clean reconfigure.
+rm -rf ./build
+meson setup ./build -Ddrivers=lgr -Dexamples=simple,opengl
 echo ">>> Building..."
 ninja -C ./build
 echo ">>> Installing..."
