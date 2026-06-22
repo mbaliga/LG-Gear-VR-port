@@ -121,6 +121,21 @@ a fixed sample dt (~5 ms / 200 Hz) is a reasonable starting assumption.
 - Panels are physically rotated — OpenHMD multiplies the eye projection matrices
   by a 90° flip. Our renderer will need an equivalent rotation.
 
+### Confirmed on Steam Deck (kscreen-doctor)
+
+The headset enumerates as DisplayPort output with these native modes:
+`1440x960@57` (default) and `1440x960@60`, plus lower fallbacks (1440x900,
+1280x800, 1280x720, 1024x768, 800x600, and an odd 2880x288@50). KDE drove it at
+**1440×960** with no tweaking needed — the mode is correct out of the box.
+
+Renderer implications:
+- Framebuffer is 1440×960 landscape; left eye = left 720×960, right eye = right
+  720×960.
+- Each eye panel is physically rotated 90°, so each eye's image must be rotated
+  90° **within its half** (a whole-display rotation does NOT achieve this — it's a
+  per-eye render concern, matching OpenHMD's projection flip).
+- Add barrel/pincushion lens distortion + IPD (~63.5 mm) for comfort.
+
 ## Plan to run on a regular Android phone
 
 1. **Gate check — DP Alt Mode.** Confirm the phone can output video over USB-C
