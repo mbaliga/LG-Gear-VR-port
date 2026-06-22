@@ -11,8 +11,12 @@ WORK="$HOME/LGVR"
 mkdir -p "$WORK"
 cd "$WORK"
 
-echo ">>> Ensuring libusb is present (OpenHMD's bundled hidapi needs it)..."
-sudo pacman -S --needed libusb
+echo ">>> Force-reinstalling build dev-files..."
+# NOTE: SteamOS marks several dev packages "installed" but ships them WITHOUT
+# their dev files (.pc, headers, cmake configs). '--needed' then skips them and
+# the files never land in the unlocked /usr, breaking pkg-config at build time.
+# So we deliberately reinstall (no --needed) to force the files onto disk.
+sudo pacman -S --noconfirm hidapi libusb sdl sdl2 sdl2_ttf glew glu libglvnd
 
 if [ ! -d "$WORK/LG-R100" ]; then
     echo ">>> Cloning OpenHMD (LG-R100 branch)..."
