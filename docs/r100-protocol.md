@@ -136,6 +136,15 @@ a fixed sample dt (~5 ms / 200 Hz) is a reasonable starting assumption.
 
 ## Hardware gotchas learned on real hardware
 
+- **DP video and USB HID coexist on a direct connection — confirmed working on a
+  Steam Deck.** Plugged straight into the Deck's USB-C port, the headset
+  simultaneously presents `card0-DP-1: connected` (DisplayPort Alt Mode video)
+  *and* the `1004:6374` HID interface. This is the same arrangement the G5 used —
+  reproduced on a non-LG host. DP Alt Mode negotiation is the make-or-break gate
+  and it passes here.
+- **The HID node number is not stable** — it depends on what else is attached and
+  whether you're direct vs. through a hub (seen as `hidraw7` via a hub, `hidraw4`
+  direct on the same Deck). Always resolve it from `1004:6374`, never hardcode.
 - **Backlight is HID-controlled, independent of video.** Sending `VR App Start`
   over HID turns the panel backlight on by itself — even with no DisplayPort
   signal present. A lit-but-blank (black) screen is the expected intermediate
