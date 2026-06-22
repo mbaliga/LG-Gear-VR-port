@@ -16,7 +16,8 @@ echo ">>> Force-reinstalling build dev-files..."
 # their dev files (.pc, headers, cmake configs). '--needed' then skips them and
 # the files never land in the unlocked /usr, breaking pkg-config at build time.
 # So we deliberately reinstall (no --needed) to force the files onto disk.
-sudo pacman -S --noconfirm hidapi libusb sdl sdl2 sdl2_ttf glew glu libglvnd
+# glibc + linux-api-headers = the standard C headers (stdint.h, string.h, ...).
+sudo pacman -S --noconfirm glibc linux-api-headers hidapi libusb sdl sdl2 sdl2_ttf glew glu libglvnd
 
 if [ ! -d "$WORK/LG-R100" ]; then
     echo ">>> Cloning OpenHMD (LG-R100 branch)..."
