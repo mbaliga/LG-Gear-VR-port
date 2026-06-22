@@ -131,10 +131,18 @@ The headset enumerates as DisplayPort output with these native modes:
 Renderer implications:
 - Framebuffer is 1440×960 landscape; left eye = left 720×960, right eye = right
   720×960.
-- Each eye panel is physically rotated 90°, so each eye's image must be rotated
-  90° **within its half** (a whole-display rotation does NOT achieve this — it's a
-  per-eye render concern, matching OpenHMD's projection flip).
+- **Each eye panel is physically mounted rotated ~90°, and the two are mirror
+  images of each other (opposite directions).** CONFIRMED ON HARDWARE: mirroring
+  the Deck's desktop to the headset shows the *same* content in both lenses but
+  rotated oppositely (left panel one way, right panel the other). So a plain
+  screen mirror is unusable for flat content — each eye needs its own pre-rotated,
+  pre-distorted half.
+- OpenHMD's driver already compensates with opposite per-eye projection flips:
+  right eye `[[0,-1],[1,0]]`, left eye `[[0,1],[-1,0]]` (a +90° / −90° pair). Any
+  renderer we write (incl. the Android app) must do the same per-eye rotation.
 - Add barrel/pincushion lens distortion + IPD (~63.5 mm) for comfort.
+- Takeaway for "big-screen flat media": you need a VR compositor (SteamVR via
+  OpenHMD, or our own per-eye renderer) — not a desktop mirror.
 
 ## Plan to run on a regular Android phone
 
