@@ -35,8 +35,23 @@ sudo pacman -S --needed linux-api-headers linux-neptune-headers
 
 echo
 echo "================ Stage 1 check ================"
-echo -n "gcc:   "; gcc --version 2>/dev/null | head -1 || echo "MISSING"
-echo -n "meson: "; meson --version 2>/dev/null || echo "MISSING"
-echo -n "cmake: "; cmake --version 2>/dev/null | head -1 || echo "MISSING"
-echo -n "hidapi:"; pacman -Q hidapi 2>/dev/null || echo " MISSING"
-echo "If all four show versions, Stage 1 is done -> run setup/stage2-openhmd.sh"
+ok=1
+for t in gcc meson cmake ninja; do
+    if command -v "$t" >/dev/null 2>&1; then
+        printf "  %-6s OK (%s)\n" "$t" "$(command -v "$t")"
+    else
+        printf "  %-6s MISSING\n" "$t"; ok=0
+    fi
+done
+if pacman -Q hidapi >/dev/null 2>&1; then
+    printf "  %-6s OK (%s)\n" "hidapi" "$(pacman -Q hidapi)"
+else
+    printf "  %-6s MISSING\n" "hidapi"; ok=0
+fi
+if [ "$ok" = 1 ]; then
+    echo "Stage 1 done -> run:  bash setup/stage2-openhmd.sh"
+else
+    echo "Something is missing above. Re-run the install and check pacman's errors:"
+    echo "  sudo pacman -S --needed base-devel gcc meson ninja cmake"
+fi
+
