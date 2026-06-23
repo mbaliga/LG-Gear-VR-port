@@ -91,15 +91,15 @@ test, reboot, shutdown, compass/proximity, self-tests, calibration) — same
 
 ### IMU (report ID 5) — exact layout
 
-Packet is **31 or 32 bytes**. After the 1-byte report ID, skip **1 more byte**,
-then read **six little-endian IEEE-754 floats** (4 bytes each):
+Packet is **31 or 32 bytes**. After the 1-byte report ID, read **six
+little-endian IEEE-754 floats** (4 bytes each) — OpenHMD skips only the report-ID
+byte, so the gyro floats start at **offset 1** (NOT offset 2):
 
 ```
 offset 0      : report ID = 5
-offset 1      : skipped (unknown)
-offset 2..13  : gyro  x, y, z   (3x float32 LE)
-offset 14..25 : accel x, y, z   (3x float32 LE)
-offset 26..   : unknown byte + counter + unknown (unused)
+offset 1..12  : gyro  x, y, z   (3x float32 LE)
+offset 13..24 : accel x, y, z   (3x float32 LE)
+offset 25..   : unknown byte + counter + unknown (unused)
 ```
 
 Then OpenHMD applies these corrections before sensor fusion:

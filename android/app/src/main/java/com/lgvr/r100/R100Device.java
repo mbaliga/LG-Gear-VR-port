@@ -188,11 +188,12 @@ public class R100Device {
                 case BTN_BACK_ON: listener.onButton("BACK", true); break;
                 case BTN_BACK_OFF:listener.onButton("BACK", false); break;
             }
-        } else if (type == IRQ_SENSORS && n >= 26) {
+        } else if (type == IRQ_SENSORS && n >= 25) {
             ByteBuffer bb = ByteBuffer.wrap(buf).order(ByteOrder.LITTLE_ENDIAN);
-            // offset 0 = id, 1 = unknown, then 6 float32: gyro xyz, accel xyz
-            float gx = bb.getFloat(2),  gy = bb.getFloat(6),  gz = bb.getFloat(10);
-            float ax = bb.getFloat(14), ay = bb.getFloat(18), az = bb.getFloat(22);
+            // offset 0 = report id (5); OpenHMD skips ONLY that byte, then reads
+            // 6 float32 LE: gyro xyz at 1/5/9, accel xyz at 13/17/21.
+            float gx = bb.getFloat(1),  gy = bb.getFloat(5),  gz = bb.getFloat(9);
+            float ax = bb.getFloat(13), ay = bb.getFloat(17), az = bb.getFloat(21);
             // OpenHMD corrections
             gx *= 4f; gy *= 4f; gz = -(gz * 4f);
             az = -az;
