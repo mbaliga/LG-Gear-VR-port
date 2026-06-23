@@ -5,6 +5,7 @@ import android.content.Context;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.view.Display;
+import android.view.WindowManager;
 
 /**
  * Hosts the stereo GL view on the headset's external display (the R100 shows up
@@ -23,6 +24,9 @@ public class VrPresentation extends Presentation {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (getWindow() != null) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
         glView = new GLSurfaceView(getContext());
         glView.setEGLContextClientVersion(2);
         glView.setRenderer(renderer);

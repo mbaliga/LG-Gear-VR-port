@@ -14,6 +14,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Display;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.TextView;
 
@@ -79,6 +80,9 @@ public class MainActivity extends Activity implements R100Device.Listener {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        // Keep the phone awake: phones usually drop USB-C DisplayPort output when
+        // the screen sleeps, which would tear down the headset display.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         statusView = findViewById(R.id.status);
         trackingView = findViewById(R.id.tracking);
         logView = findViewById(R.id.log);
