@@ -6,12 +6,14 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.hardware.display.DisplayManager;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Display;
 import android.widget.Button;
 import android.widget.TextView;
 
@@ -30,6 +32,7 @@ public class MainActivity extends Activity implements R100Device.Listener {
 
     private UsbManager usbManager;
     private R100Device r100;
+    private VrPresentation vr;
 
     private TextView statusView, trackingView, logView;
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -71,7 +74,8 @@ public class MainActivity extends Activity implements R100Device.Listener {
         trackingView = findViewById(R.id.tracking);
         logView = findViewById(R.id.log);
         ((Button) findViewById(R.id.btnConnect)).setOnClickListener(v -> findAndConnect());
-        ((Button) findViewById(R.id.btnLock)).setOnClickListener(v -> log("(recenter is a no-op in phase 1)"));
+        ((Button) findViewById(R.id.btnLock)).setOnClickListener(v -> log("(recenter comes with head-tracking)"));
+        ((Button) findViewById(R.id.btnVr)).setOnClickListener(v -> enterVr());
 
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
 
@@ -149,6 +153,28 @@ public class MainActivity extends Activity implements R100Device.Listener {
         }
     }
 
+    /** Push the stereo renderer onto the headset's external (DisplayPort) display. */
+    private void enterVr() {
+        DisplayManager dm = (DisplayManager) getSystemService(DISPLAY_SERVICE);
+        Display[] displays = dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION);
+        if (displays.length == 0) {
+            setStatus("No external display found — is the headset plugged in as a display?");
+            log("No presentation display. The monitor icon should be in the status bar when the R100 is a display.");
+            return;
+        }
+        Display target = displays[0];
+        if (vr != null) { vr.dismiss(); vr = null; }
+        try {
+            vr = new VrPresentation(this, target);
+            vr.show();
+            log("VR view started on: " + target.getName() + " (" +
+                    target.getMode().getPhysicalWidth() + "x" + target.getMode().getPhysicalHeight() + ")");
+            setStatus("VR running — look into the headset. (Test card; head-tracking next.)");
+        } catch (Exception e) {
+            log("Failed to start VR: " + e);
+        }
+    }
+
     // ---- R100Device.Listener (called from background threads) ----
 
     @Override public void onLog(String msg) { log(msg); }
@@ -193,6 +219,7 @@ public class MainActivity extends Activity implements R100Device.Listener {
         super.onDestroy();
         wantConnected = false;
         try { unregisterReceiver(usbReceiver); } catch (Exception ignored) {}
+        if (vr != null) { vr.dismiss(); vr = null; }
         if (r100 != null) { r100.close(); r100 = null; }
     }
 }

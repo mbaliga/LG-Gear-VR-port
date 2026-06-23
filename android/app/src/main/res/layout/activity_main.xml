@@ -30,6 +30,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Recenter" />
+
+        <Button
+            android:id="@+id/btnVr"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Enter VR" />
     </LinearLayout>
 
     <TextView
