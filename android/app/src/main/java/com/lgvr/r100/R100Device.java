@@ -42,6 +42,15 @@ public class R100Device {
     private static final long KEEP_ALIVE_MS = 5000; // resend "Sleep Disable" occasionally
     private static final long DATA_TIMEOUT_MS = 3000; // no reports this long => link gone
 
+    // Sending "VR App Start" makes the headset enter display mode, which
+    // re-enumerates the USB-C link (DP Alt Mode) and forces a reconnect. If we
+    // re-wake on every reconnect we loop forever. So we only re-wake if it's
+    // been a while — on the rapid reconnects we just resume reading and let the
+    // headset stay in display mode. Shared across R100Device instances since each
+    // re-enumeration is a brand-new UsbDevice.
+    private static volatile long sLastWakeMs = 0;
+    private static final long REWAKE_COOLDOWN_MS = 8000;
+
     public interface Listener {
         void onLog(String msg);
         void onImu(float gx, float gy, float gz, float ax, float ay, float az);
@@ -172,12 +181,20 @@ public class R100Device {
     private void startIo() {
         ioThread = new Thread(() -> {
             sleep(150); // let the interface settle
-            // Handshake (sent once, like OpenHMD). VR App Start is retried.
-            sendWithRetry(START_DEVICE, "VR App Start", 4);
-            sleep(60); send(ACCEL_ON, "Accel On");
-            sleep(40); send(GYRO_ON, "Gyro On");
-            sleep(40); send(KEEP_ALIVE, "Sleep Disable");
-            log("Handshake sent — the headset backlight should be on.");
+            boolean recentlyWoken = (System.currentTimeMillis() - sLastWakeMs) < REWAKE_COOLDOWN_MS;
+            if (recentlyWoken) {
+                // Came back from a DP-Alt-Mode re-enumeration — DON'T re-wake
+                // (that just re-triggers the loop). Resume reading.
+                log("Reconnected — skipping re-wake so the link can settle.");
+                send(KEEP_ALIVE, null);
+            } else {
+                sendWithRetry(START_DEVICE, "VR App Start", 4);
+                sleep(60); send(ACCEL_ON, "Accel On");
+                sleep(40); send(GYRO_ON, "Gyro On");
+                sleep(40); send(KEEP_ALIVE, "Sleep Disable");
+                sLastWakeMs = System.currentTimeMillis();
+                log("Handshake sent — the headset backlight should be on.");
+            }
 
             byte[] buf = new byte[64];
             long now = System.currentTimeMillis();
