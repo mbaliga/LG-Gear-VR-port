@@ -43,8 +43,17 @@ public class MainActivity extends Activity implements R100Device.Listener {
 
     private volatile float lastGx, lastGy, lastGz, lastAx, lastAy, lastAz;
 
-    private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
-        @Override public void onReceive(Context context, Intent intent) {
+    private final DisplayManager.DisplayListener displayListener = new DisplayManager.DisplayListener() {
+        @Override public void onDisplayAdded(int id) { ui.post(() -> autoEnterVrIfPossible()); }
+        @Override public void onDisplayChanged(int id) { ui.post(() -> autoEnterVrIfPossible()); }
+        @Override public void onDisplayRemoved(int id) {
+            ui.post(() -> {
+                if (vr != null) { vr.dismiss(); vr = null; log("External display removed."); }
+            });
+        }
+    };
+
+    private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {        @Override public void onReceive(Context context, Intent intent) {
             if (ACTION_USB_PERMISSION.equals(intent.getAction())) {
                 UsbDevice dev = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                 boolean granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false);
@@ -78,6 +87,11 @@ public class MainActivity extends Activity implements R100Device.Listener {
         ((Button) findViewById(R.id.btnVr)).setOnClickListener(v -> enterVr());
 
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
+
+        // Auto-start VR the moment the headset's display appears (it can drop
+        // quickly if nothing claims it), and re-grab it if it blips.
+        DisplayManager dm = (DisplayManager) getSystemService(DISPLAY_SERVICE);
+        dm.registerDisplayListener(displayListener, ui);
 
         IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
@@ -145,6 +159,7 @@ public class MainActivity extends Activity implements R100Device.Listener {
                 r100 = d;
                 wantConnected = true;
                 setStatus("Connected. Headset awake — move it to see tracking.");
+                autoEnterVrIfPossible();
             } else {
                 setStatus("Connect failed — see log below.");
             }
@@ -153,17 +168,25 @@ public class MainActivity extends Activity implements R100Device.Listener {
         }
     }
 
+    /** If the headset's display is present and we're not already showing, start VR. */
+    private void autoEnterVrIfPossible() {
+        if (vr != null) return;
+        DisplayManager dm = (DisplayManager) getSystemService(DISPLAY_SERVICE);
+        if (dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION).length > 0) {
+            enterVr();
+        }
+    }
+
     /** Push the stereo renderer onto the headset's external (DisplayPort) display. */
     private void enterVr() {
+        if (vr != null) return; // already running
         DisplayManager dm = (DisplayManager) getSystemService(DISPLAY_SERVICE);
         Display[] displays = dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION);
         if (displays.length == 0) {
-            setStatus("No external display found — is the headset plugged in as a display?");
-            log("No presentation display. The monitor icon should be in the status bar when the R100 is a display.");
+            setStatus("No external display yet — keep the headset plugged in; VR auto-starts when it appears.");
             return;
         }
         Display target = displays[0];
-        if (vr != null) { vr.dismiss(); vr = null; }
         try {
             vr = new VrPresentation(this, target);
             vr.show();
@@ -219,6 +242,9 @@ public class MainActivity extends Activity implements R100Device.Listener {
         super.onDestroy();
         wantConnected = false;
         try { unregisterReceiver(usbReceiver); } catch (Exception ignored) {}
+        try {
+            ((DisplayManager) getSystemService(DISPLAY_SERVICE)).unregisterDisplayListener(displayListener);
+        } catch (Exception ignored) {}
         if (vr != null) { vr.dismiss(); vr = null; }
         if (r100 != null) { r100.close(); r100 = null; }
     }
