@@ -13,10 +13,10 @@ import java.nio.ByteOrder;
 /**
  * Talks to the LG 360 VR (R100) over USB (Android USB Host API).
  *
- * Mirrors tools/r100_wake.py and OpenHMD's driver:
- *   - send "VR App Start" to switch the panels/backlight on
- *   - re-send "Sleep Disable" as a keep-alive
- *   - read input reports: id 5 = IMU (gyro/accel), id 2 = buttons
+ * All USB traffic happens on a SINGLE I/O thread (like OpenHMD): reads and the
+ * occasional write are interleaved on one thread so they never contend on the
+ * same UsbDeviceConnection (concurrent read+write was causing the -1 send
+ * failures). Disconnect is detected by read-starvation, not by send failures.
  *
  * Protocol details: see docs/r100-protocol.md.
  */
@@ -39,6 +39,9 @@ public class R100Device {
     private static final int IRQ_SENSORS = 5;
     private static final int BTN_OK_ON = 1, BTN_BACK_ON = 2, BTN_BACK_OFF = 3, BTN_OK_OFF = 4;
 
+    private static final long KEEP_ALIVE_MS = 5000; // resend "Sleep Disable" occasionally
+    private static final long DATA_TIMEOUT_MS = 3000; // no reports this long => link gone
+
     public interface Listener {
         void onLog(String msg);
         void onImu(float gx, float gy, float gz, float ax, float ay, float az);
@@ -59,7 +62,7 @@ public class R100Device {
 
     private volatile boolean running = false;
     private volatile boolean closed = false;
-    private Thread readerThread, keepAliveThread;
+    private Thread ioThread;
 
     public R100Device(UsbManager manager, UsbDevice device, Listener listener) {
         this.manager = manager;
@@ -107,20 +110,7 @@ public class R100Device {
                 + (epOut != null ? (" epOut=" + epOut.getAddress()) : " (no OUT ep, using control)"));
 
         running = true;
-        startReader();
-
-        sleep(150); // let the interface settle before the first report
-        // VR App Start is the important one; retry it since the device can be
-        // briefly busy right after claim.
-        sendWithRetry(START_DEVICE, "VR App Start", 3);
-        sleep(80);
-        send(ACCEL_ON, "Accel On");
-        sleep(40);
-        send(GYRO_ON, "Gyro On");
-        sleep(40);
-        send(KEEP_ALIVE, "Sleep Disable");
-        startKeepAlive();
-        log("Handshake sent — the headset backlight should be on.");
+        startIo();
         return true;
     }
 
@@ -129,24 +119,20 @@ public class R100Device {
         if (closed) return;
         closed = true;
         running = false;
-        if (keepAliveThread != null) keepAliveThread.interrupt();
-        if (readerThread != null) readerThread.interrupt();
-        UsbDeviceConnection c = connection;
-        connection = null;
-        try {
-            if (c != null) {
-                if (iface != null) c.releaseInterface(iface);
-                c.close();
-            }
-        } catch (Exception ignored) {}
+        if (ioThread != null) ioThread.interrupt();
+        teardownConnection();
         listener.onClosed();
     }
 
-    /** Unexpected drop: tear down, then notify so the UI can auto-reconnect. */
     private synchronized void lost() {
         if (closed) return;
         closed = true;
         running = false;
+        teardownConnection();
+        listener.onConnectionLost();
+    }
+
+    private void teardownConnection() {
         UsbDeviceConnection c = connection;
         connection = null;
         try {
@@ -155,10 +141,10 @@ public class R100Device {
                 c.close();
             }
         } catch (Exception ignored) {}
-        listener.onConnectionLost();
     }
 
-    private synchronized int send(byte[] report, String name) {
+    /** Only ever called from the I/O thread, so it never contends with reads. */
+    private int send(byte[] report, String name) {
         UsbDeviceConnection c = connection;
         if (c == null) return -1;
         int r;
@@ -183,45 +169,46 @@ public class R100Device {
         }
     }
 
-    private void startKeepAlive() {
-        keepAliveThread = new Thread(() -> {
-            int fails = 0;
-            while (running) {
-                sleep(1000);
-                if (!running) break;
-                if (send(KEEP_ALIVE, null) < 0) {
-                    if (++fails >= 3) {
-                        log("Lost the headset (keep-alive failed) — reconnecting…");
-                        lost();
-                        break;
-                    }
-                } else {
-                    fails = 0;
-                }
-            }
-        }, "r100-keepalive");
-        keepAliveThread.start();
-    }
+    private void startIo() {
+        ioThread = new Thread(() -> {
+            sleep(150); // let the interface settle
+            // Handshake (sent once, like OpenHMD). VR App Start is retried.
+            sendWithRetry(START_DEVICE, "VR App Start", 4);
+            sleep(60); send(ACCEL_ON, "Accel On");
+            sleep(40); send(GYRO_ON, "Gyro On");
+            sleep(40); send(KEEP_ALIVE, "Sleep Disable");
+            log("Handshake sent — the headset backlight should be on.");
 
-    private void startReader() {
-        readerThread = new Thread(() -> {
             byte[] buf = new byte[64];
+            long now = System.currentTimeMillis();
+            long lastData = now, lastKa = now;
+
             while (running) {
                 UsbDeviceConnection c = connection;
                 if (c == null) break;
                 int n;
                 try {
-                    n = c.bulkTransfer(epIn, buf, buf.length, 500);
+                    n = c.bulkTransfer(epIn, buf, buf.length, 200);
                 } catch (Exception e) {
-                    break; // connection went away mid-read
+                    break;
                 }
-                if (n <= 0) continue; // -1 == timeout/idle, just retry
-                try {
-                    parse(buf, n);
-                } catch (Exception ignored) {}
+                now = System.currentTimeMillis();
+                if (n > 0) {
+                    lastData = now;
+                    try { parse(buf, n); } catch (Exception ignored) {}
+                }
+                if (now - lastKa >= KEEP_ALIVE_MS) {
+                    send(KEEP_ALIVE, null); // best-effort, quiet
+                    lastKa = now;
+                }
+                if (now - lastData >= DATA_TIMEOUT_MS) {
+                    log("No reports for " + (DATA_TIMEOUT_MS / 1000) + "s — reconnecting…");
+                    lost();
+                    return;
+                }
             }
-        }, "r100-reader");
-        readerThread.start();
+        }, "r100-io");
+        ioThread.start();
     }
 
     private void parse(byte[] buf, int n) {
