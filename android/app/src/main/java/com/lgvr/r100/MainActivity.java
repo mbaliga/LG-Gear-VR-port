@@ -35,7 +35,9 @@ public class MainActivity extends Activity implements R100Device.Listener {
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final StringBuilder logBuf = new StringBuilder();
 
-    // recenter offset (simple yaw/pitch/roll zeroing handled later; placeholder now)
+    private volatile boolean wantConnected = false; // should we auto-reconnect?
+    private volatile boolean connecting = false;     // guard against double-connect
+
     private volatile float lastGx, lastGy, lastGz, lastAx, lastAy, lastAz;
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
@@ -54,6 +56,7 @@ public class MainActivity extends Activity implements R100Device.Listener {
                 if (dev != null && dev.getVendorId() == R100Device.VID
                         && dev.getProductId() == R100Device.PID) {
                     log("Headset detached.");
+                    wantConnected = false; // re-attach intent will reconnect us
                     if (r100 != null) { r100.close(); r100 = null; }
                     setStatus("Headset unplugged.");
                 }
@@ -81,21 +84,26 @@ public class MainActivity extends Activity implements R100Device.Listener {
         }
 
         log("R100 VR phase-1. VID=0x1004 PID=0x6374.");
-        // If launched by plugging the headset in, the device is in the intent.
-        handleAttachIntent(getIntent());
-        findAndConnect();
+        // If launched by plugging the headset in, the device is in the intent;
+        // otherwise scan for an already-connected one. Don't do both (that
+        // double-connects and tears the first link down).
+        if (!handleAttachIntent(getIntent())) {
+            findAndConnect();
+        }
     }
 
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        handleAttachIntent(intent);
+        setIntent(intent);
+        handleAttachIntent(intent); // re-attach (incl. after the headset re-enumerates)
     }
 
-    private void handleAttachIntent(Intent intent) {
+    private boolean handleAttachIntent(Intent intent) {
         if (intent != null && UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(intent.getAction())) {
             UsbDevice dev = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-            if (dev != null) requestAndConnect(dev);
+            if (dev != null) { requestAndConnect(dev); return true; }
         }
+        return false;
     }
 
     private void findAndConnect() {
@@ -109,6 +117,7 @@ public class MainActivity extends Activity implements R100Device.Listener {
     }
 
     private void requestAndConnect(UsbDevice dev) {
+        if (connecting || r100 != null) return; // already connected/connecting
         if (usbManager.hasPermission(dev)) {
             connectTo(dev);
             return;
@@ -122,14 +131,21 @@ public class MainActivity extends Activity implements R100Device.Listener {
     }
 
     private void connectTo(UsbDevice dev) {
-        if (r100 != null) { r100.close(); r100 = null; }
-        setStatus("Connecting to R100…");
-        r100 = new R100Device(usbManager, dev, this);
-        if (r100.open()) {
-            setStatus("Connected. Headset awake — move it to see tracking.");
-        } else {
-            setStatus("Connect failed — see log below.");
-            r100 = null;
+        if (connecting) return;
+        connecting = true;
+        try {
+            if (r100 != null) { r100.close(); r100 = null; }
+            setStatus("Connecting to R100…");
+            R100Device d = new R100Device(usbManager, dev, this);
+            if (d.open()) {
+                r100 = d;
+                wantConnected = true;
+                setStatus("Connected. Headset awake — move it to see tracking.");
+            } else {
+                setStatus("Connect failed — see log below.");
+            }
+        } finally {
+            connecting = false;
         }
     }
 
@@ -150,6 +166,17 @@ public class MainActivity extends Activity implements R100Device.Listener {
 
     @Override public void onClosed() { log("Connection closed."); }
 
+    @Override public void onConnectionLost() {
+        ui.post(() -> {
+            r100 = null;
+            log("Connection lost.");
+            if (wantConnected) {
+                setStatus("Reconnecting…");
+                ui.postDelayed(this::findAndConnect, 1200);
+            }
+        });
+    }
+
     // ---- UI helpers ----
 
     private void setStatus(String s) { ui.post(() -> statusView.setText(s)); }
@@ -164,7 +191,8 @@ public class MainActivity extends Activity implements R100Device.Listener {
 
     @Override protected void onDestroy() {
         super.onDestroy();
+        wantConnected = false;
         try { unregisterReceiver(usbReceiver); } catch (Exception ignored) {}
-        if (r100 != null) r100.close();
+        if (r100 != null) { r100.close(); r100 = null; }
     }
 }
