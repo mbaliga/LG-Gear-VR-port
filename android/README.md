@@ -36,3 +36,23 @@ Requires Android SDK platform 34 + build-tools 34.0.0 (JDK 17+).
    `gyro`/`accel` values that change as you move the headset, plus button events.
 
 Protocol details: `../docs/r100-protocol.md`.
+
+## Status / known limitation (RedMagic 11 Pro)
+
+- **Phase 1 works great:** wake (backlight on), head tracking (IMU verified
+  against gravity), and both buttons are solid and stable over USB.
+- **Phase 2 (display) is blocked by the phone, not the app.** The R100 enumerates
+  as a 1440×960 DisplayPort display and the Presentation renderer *does* start on
+  it ("VR view started on: HDMI Screen"), but the RedMagic 11 Pro will not **hold**
+  the DP Alt Mode link — it drops within seconds and the USB-C re-enumerates in a
+  loop. Ruled out in testing:
+  - re-sending `VR App Start` (added a re-wake cooldown — still drops)
+  - screen-sleep (forced `FLAG_KEEP_SCREEN_ON` — still drops)
+  - app grabbing the display late (auto-grab on display-add — still drops)
+  - cable (the R100's cable is captive; can't swap)
+  - **Decisive:** the RedMagic's *own* screen-projection to this display also
+    drops "after a bit", with our app closed — so it's the phone's DP/USB-C
+    behavior, most likely **insufficient power** for the headset's twin displays.
+- **The same code path is expected to work on a phone with a stable, higher-power
+  DP Alt Mode implementation.** On the Steam Deck the DP link is rock-solid
+  (`docs/steamvr-on-deck.md`), which is the recommended host for actual viewing.
